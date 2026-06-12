@@ -10,7 +10,7 @@ from torchvision import transforms
 from datasets import load_dataset
 from deepspeed.accelerator import get_accelerator
 from deepspeed.moe.utils import split_params_into_different_moe_groups_for_optimizer
-
+cifar10_dataset = "uoft-cs/cifar10"
 
 def add_argument():
     parser = argparse.ArgumentParser(description="CIFAR")
@@ -304,7 +304,7 @@ def main(args):
     if torch.distributed.get_rank() == 0:
         try:
             ds = load_dataset(
-                "cifar10",
+                cifar10_dataset,
                 cache_dir="./data",
                 trust_remote_code=True,
                 download_mode="force_redownload",   # remove after first successful download
@@ -319,7 +319,7 @@ def main(args):
 
         try:
             ds = load_dataset(
-                "cifar10",
+                cifar10_dataset,
                 cache_dir="./data",
                 trust_remote_code=True,
             )
