@@ -295,50 +295,38 @@ def main(args):
     #     the num_worker of torch.utils.data.DataLoader() to 0.
     ########################################################################
     transform = transforms.Compose(
-        [transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
+        [
+            transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+        ]
     )
 
     if torch.distributed.get_rank() == 0:
-        # Download and cache the dataset on rank 0 first.
         try:
-            train_hf = load_dataset(
+            ds = load_dataset(
                 "cifar10",
-                split="train",
                 cache_dir="./data",
                 trust_remote_code=True,
-                download_mode="force_redownload",
-            )
-            test_hf = load_dataset(
-                "cifar10",
-                split="test",
-                cache_dir="./data",
-                trust_remote_code=True,
-                download_mode="force_redownload",
+                download_mode="force_redownload",   # remove after first successful download
             )
         except Exception as e:
-            print(f"Failed to load from Hugging Face: {e}. Falling back to torchvision.")
-            train_hf = None
-            test_hf = None
+            print(f"Failed to load from Hugging Face: {e}")
+            ds = None
+
         torch.distributed.barrier()
     else:
         torch.distributed.barrier()
+
         try:
-            train_hf = load_dataset(
+            ds = load_dataset(
                 "cifar10",
-                split="train",
-                cache_dir="./data",
-                trust_remote_code=True,
-            )
-            test_hf = load_dataset(
-                "cifar10",
-                split="test",
                 cache_dir="./data",
                 trust_remote_code=True,
             )
         except Exception as e:
-            print(f"Failed to load from Hugging Face: {e}. Falling back to torchvision.")
-            train_hf = None
-            test_hf = None
+            print(f"Failed to load from Hugging Face: {e}")
+            ds = None
+
 
     class HuggingFaceCIFAR10(torch.utils.data.Dataset):
         def __init__(self, hf_dataset, transform=None):
@@ -349,23 +337,31 @@ def main(args):
             return len(self.dataset)
 
         def __getitem__(self, idx):
-            item = self.dataset[int(idx)]
-            image = item["img"]
+            item = self.dataset[idx]
+            image = item["img"]          # PIL Image
+            label = item["label"]
+
             if self.transform is not None:
                 image = self.transform(image)
-            label = torch.tensor(item["label"], dtype=torch.long)
+
             return image, label
 
-    if train_hf is not None and test_hf is not None:
-        trainset = HuggingFaceCIFAR10(train_hf, transform=transform)
-        testset = HuggingFaceCIFAR10(test_hf, transform=transform)
+
+    if ds is not None:
+        trainset = HuggingFaceCIFAR10(ds["train"], transform=transform)
+        testset = HuggingFaceCIFAR10(ds["test"], transform=transform)
     else:
-        # Fallback to torchvision if HF fails
         trainset = torchvision.datasets.CIFAR10(
-            root="./data", train=True, download=True, transform=transform
+            root="./data",
+            train=True,
+            download=True,
+            transform=transform,
         )
         testset = torchvision.datasets.CIFAR10(
-            root="./data", train=False, download=True, transform=transform
+            root="./data",
+            train=False,
+            download=True,
+            transform=transform,
         )
 
     ########################################################################
