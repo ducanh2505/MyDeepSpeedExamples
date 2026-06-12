@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 from torchvision import transforms
+from datasets import load_dataset
 from deepspeed.accelerator import get_accelerator
 from deepspeed.moe.utils import split_params_into_different_moe_groups_for_optimizer
 
@@ -297,21 +298,34 @@ def main(args):
         [transforms.ToTensor(), transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
     )
 
-    if torch.distributed.get_rank() != 0:
-        # Might be downloading cifar data, let rank 0 download first.
-        torch.distributed.barrier()
-
-    # Load or download cifar data.
-    trainset = torchvision.datasets.CIFAR10(
-        root="./data", train=True, download=True, transform=transform
-    )
-    testset = torchvision.datasets.CIFAR10(
-        root="./data", train=False, download=True, transform=transform
-    )
-
     if torch.distributed.get_rank() == 0:
-        # Cifar data is downloaded, indicate other ranks can proceed.
+        # Download and cache the dataset on rank 0 first.
+        train_hf = load_dataset("cifar10", split="train", cache_dir="./data")
+        test_hf = load_dataset("cifar10", split="test", cache_dir="./data")
         torch.distributed.barrier()
+    else:
+        torch.distributed.barrier()
+        train_hf = load_dataset("cifar10", split="train", cache_dir="./data")
+        test_hf = load_dataset("cifar10", split="test", cache_dir="./data")
+
+    class HuggingFaceCIFAR10(torch.utils.data.Dataset):
+        def __init__(self, hf_dataset, transform=None):
+            self.dataset = hf_dataset
+            self.transform = transform
+
+        def __len__(self):
+            return len(self.dataset)
+
+        def __getitem__(self, idx):
+            item = self.dataset[int(idx)]
+            image = item["img"]
+            if self.transform is not None:
+                image = self.transform(image)
+            label = torch.tensor(item["label"], dtype=torch.long)
+            return image, label
+
+    trainset = HuggingFaceCIFAR10(train_hf, transform=transform)
+    testset = HuggingFaceCIFAR10(test_hf, transform=transform)
 
     ########################################################################
     # Step 2. Define the network with DeepSpeed.
@@ -339,7 +353,7 @@ def main(args):
         model=net,
         model_parameters=parameters,
         training_data=trainset,
-        config=ds_config,
+        # config=ds_config,
     )
 
     # Get the local device name (str) and local rank (int).
