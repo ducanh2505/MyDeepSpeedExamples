@@ -300,13 +300,45 @@ def main(args):
 
     if torch.distributed.get_rank() == 0:
         # Download and cache the dataset on rank 0 first.
-        train_hf = load_dataset("cifar10", split="train", cache_dir="./data")
-        test_hf = load_dataset("cifar10", split="test", cache_dir="./data")
+        try:
+            train_hf = load_dataset(
+                "cifar10",
+                split="train",
+                cache_dir="./data",
+                trust_remote_code=True,
+                download_mode="force_redownload",
+            )
+            test_hf = load_dataset(
+                "cifar10",
+                split="test",
+                cache_dir="./data",
+                trust_remote_code=True,
+                download_mode="force_redownload",
+            )
+        except Exception as e:
+            print(f"Failed to load from Hugging Face: {e}. Falling back to torchvision.")
+            train_hf = None
+            test_hf = None
         torch.distributed.barrier()
     else:
         torch.distributed.barrier()
-        train_hf = load_dataset("cifar10", split="train", cache_dir="./data")
-        test_hf = load_dataset("cifar10", split="test", cache_dir="./data")
+        try:
+            train_hf = load_dataset(
+                "cifar10",
+                split="train",
+                cache_dir="./data",
+                trust_remote_code=True,
+            )
+            test_hf = load_dataset(
+                "cifar10",
+                split="test",
+                cache_dir="./data",
+                trust_remote_code=True,
+            )
+        except Exception as e:
+            print(f"Failed to load from Hugging Face: {e}. Falling back to torchvision.")
+            train_hf = None
+            test_hf = None
 
     class HuggingFaceCIFAR10(torch.utils.data.Dataset):
         def __init__(self, hf_dataset, transform=None):
@@ -324,8 +356,17 @@ def main(args):
             label = torch.tensor(item["label"], dtype=torch.long)
             return image, label
 
-    trainset = HuggingFaceCIFAR10(train_hf, transform=transform)
-    testset = HuggingFaceCIFAR10(test_hf, transform=transform)
+    if train_hf is not None and test_hf is not None:
+        trainset = HuggingFaceCIFAR10(train_hf, transform=transform)
+        testset = HuggingFaceCIFAR10(test_hf, transform=transform)
+    else:
+        # Fallback to torchvision if HF fails
+        trainset = torchvision.datasets.CIFAR10(
+            root="./data", train=True, download=True, transform=transform
+        )
+        testset = torchvision.datasets.CIFAR10(
+            root="./data", train=False, download=True, transform=transform
+        )
 
     ########################################################################
     # Step 2. Define the network with DeepSpeed.
