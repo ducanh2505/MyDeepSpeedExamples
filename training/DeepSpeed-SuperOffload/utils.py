@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Dict, Any, Tuple
 
 import logging
-from .constants import (
+from constants import (
     LOGGER_LEVEL, LOGGER_NAME, LOGGER_RANK, LOGGER_FMT, LOGGER_DATE_FMT,
     TFLOPS_DENOMINATOR, DEFAULT_OPTIMIZER_LR, DEFAULT_OPTIMIZER_BETAS,
     ALPACA_INSTRUCTION_TEMPLATE, ALPACA_INPUT_TEMPLATE, ALPACA_RESPONSE_TEMPLATE
