@@ -9,7 +9,7 @@ from transformers import (
 )
 import argparse
 import os
-from .utils import (
+from utils import (
     setup_logger,
     load_and_preprocess_dataset,
     get_parameter_count, estimate_transformer_tflops
