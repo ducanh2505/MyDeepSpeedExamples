@@ -14,7 +14,7 @@ from utils import (
     load_and_preprocess_dataset,
     get_parameter_count, estimate_transformer_tflops
 )
-from .constants import (
+from constants import (
     DEFAULT_OPTIMIZER_LR, DEFAULT_OPTIMIZER_BETAS, MS_PER_SECOND
 )
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
